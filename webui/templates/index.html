@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ISO Splitter - 光盘识别分割</title>
+<style>
+:root{
+  --bg:#0d1117; --panel:#161b22; --panel2:#1c2128; --border:#30363d;
+  --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --accent2:#1f6feb;
+  --green:#3fb950; --red:#f85149; --orange:#d29922; --purple:#bc8cff; --teal:#39c5cf;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
+.app{display:flex;min-height:100vh}
+.sidebar{width:210px;background:var(--panel);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;position:fixed;height:100vh;z-index:10}
+.brand{padding:20px 18px;border-bottom:1px solid var(--border)}
+.brand h1{font-size:17px;font-weight:700;background:linear-gradient(90deg,var(--accent),var(--purple));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.brand .sub{font-size:11px;color:var(--muted);margin-top:3px}
+nav{padding:10px 8px;flex:1;overflow:auto}
+nav a{display:block;padding:10px 14px;color:var(--muted);text-decoration:none;border-radius:6px;
+  cursor:pointer;margin-bottom:2px;font-size:13.5px;transition:.15s}
+nav a:hover{background:var(--panel2);color:var(--text)}
+nav a.active{background:var(--accent2);color:#fff;font-weight:600}
+.side-foot{padding:14px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)}
+.main{margin-left:210px;flex:1;padding:26px 30px;max-width:1400px}
+.page{display:none}
+.page.active{display:block}
+h2{font-size:21px;margin-bottom:6px}
+.page-desc{color:var(--muted);font-size:13px;margin-bottom:22px}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:18px}
+.panel h3{margin:0 0 14px;font-size:15px;display:flex;align-items:center;gap:8px}
+.btn{background:var(--panel2);color:var(--text);border:1px solid var(--border);
+  padding:8px 15px;border-radius:6px;cursor:pointer;font-size:13px;transition:.15s;display:inline-flex;
+  align-items:center;gap:6px}
+.btn:hover{border-color:var(--accent);background:#21262d}
+.btn.primary{background:var(--accent2);border-color:var(--accent2);color:#fff}
+.btn.primary:hover{background:#388bfd}
+.btn.green{background:#238636;border-color:#2ea043;color:#fff}
+.btn.danger{color:var(--red)}
+.btn.mini{padding:4px 9px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-group{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+input,select,textarea{background:var(--bg);color:var(--text);border:1px solid var(--border);
+  border-radius:6px;padding:8px 11px;font-size:13px;font-family:inherit}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+label{display:block;color:var(--muted);font-size:12px;margin-bottom:5px}
+.form-row{margin-bottom:14px}
+.form-row input[type=text],.form-row select{width:100%;max-width:520px}
+.hint{color:var(--muted);font-size:12px}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.badge.acc{background:rgba(88,166,255,.15);color:var(--accent)}
+.badge.green{background:rgba(63,185,80,.15);color:var(--green)}
+.badge.orange{background:rgba(210,153,34,.15);color:var(--orange)}
+.badge.red{background:rgba(248,81,73,.15);color:var(--red)}
+.badge.purple{background:rgba(188,140,255,.15);color:var(--purple)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.file-card{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:12px;
+  cursor:pointer;transition:.15s}
+.file-card:hover{border-color:var(--accent);transform:translateY(-1px)}
+.file-card .fname{font-weight:600;font-size:13px;word-break:break-all}
+.file-card .fmeta{color:var(--muted);font-size:11px;margin-top:5px}
+.file-card .actions{margin-top:8px}
+.crumbs{color:var(--muted);font-size:12px;margin-bottom:12px}
+.crumbs a{color:var(--accent);cursor:pointer;text-decoration:none}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:12px;position:sticky;top:0;background:var(--panel)}
+tr:hover td{background:rgba(255,255,255,.02)}
+.iso-row{cursor:pointer}
+.tag{display:inline-block;padding:1px 6px;background:var(--panel2);border:1px solid var(--border);
+  border-radius:4px;font-size:11px;margin:1px 3px 1px 0;color:var(--muted)}
+.tag.audio{color:var(--teal);border-color:rgba(57,197,207,.3)}
+.tag.sub{color:var(--purple);border-color:rgba(188,140,255,.3)}
+.track-list{max-width:280px}
+.progress-wrap{background:var(--bg);border-radius:20px;height:8px;overflow:hidden;margin-top:6px}
+.progress-bar{height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));
+  transition:width .3s;border-radius:20px}
+.log-box{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;
+  font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--muted);
+  max-height:260px;overflow:auto;white-space:pre-wrap;line-height:1.6}
+.candidate{display:flex;gap:14px;padding:12px;border:1px solid var(--border);border-radius:8px;
+  margin-bottom:10px;cursor:pointer;transition:.15s;background:var(--panel2)}
+.candidate:hover{border-color:var(--accent)}
+.candidate.selected{border-color:var(--accent);background:rgba(88,166,255,.08)}
+.candidate img{width:60px;height:90px;object-fit:cover;border-radius:4px;background:var(--bg)}
+.candidate .info{flex:1}
+.candidate .info h4{font-size:14px;margin-bottom:4px}
+.candidate .info p{color:var(--muted);font-size:12px;line-height:1.5}
+.post{width:90px;height:135px;object-fit:cover;border-radius:6px;background:var(--panel2)}
+.empty{text-align:center;padding:50px 20px;color:var(--muted)}
+.empty .icon{font-size:42px;margin-bottom:12px;opacity:.5}
+.step-bar{display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap}
+.step{padding:6px 14px;border-radius:20px;background:var(--panel2);border:1px solid var(--border);
+  font-size:12px;color:var(--muted)}
+.step.done{color:var(--green);border-color:rgba(63,185,80,.4)}
+.step.current{color:var(--accent);border-color:var(--accent);background:rgba(88,166,255,.1)}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--panel2);border:1px solid var(--border);
+  border-left:3px solid var(--accent);padding:12px 18px;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.5);
+  z-index:100;opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none;max-width:400px}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.err{border-left-color:var(--red)}
+.toast.ok{border-left-color:var(--green)}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);
+  border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.detail-title{display:flex;align-items:flex-start;gap:18px;margin-bottom:18px}
+.detail-title .post{width:110px;height:165px}
+.detail-title h3{font-size:20px;margin-bottom:6px}
+.episode-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;max-height:320px;overflow:auto}
+.episode-item{padding:8px 10px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;font-size:12px}
+.episode-item b{color:var(--accent)}
+.split-preview td input[type=text]{width:100%;min-width:180px}
+.split-preview tr.excluded{opacity:.5}
+.split-preview tr.excluded input[type=text]{text-decoration:line-through}
+@media(max-width:900px){.sidebar{width:64px}.brand h1,.brand .sub,nav a span,.side-foot{display:none}
+  nav a{text-align:center;font-size:18px}.main{margin-left:64px;padding:18px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><h1>ISO Splitter</h1><div class="sub">光盘识别 · 分割 · 刮削</div></div>
+    <nav>
+      <a data-page="scan" class="active">📀 <span>ISO 扫描</span></a>
+      <a data-page="dirs">📂 <span>目录管理</span></a>
+      <a data-page="tasks">⚙️ <span>任务进度</span></a>
+      <a data-page="settings">🔧 <span>设置</span></a>
+    </nav>
+    <div class="side-foot">v1.0 · MakeMKV + TMDB/豆瓣</div>
+  </aside>
+
+  <main class="main">
+    <!-- ISO 扫描页 -->
+    <div class="page active" id="page-scan">
+      <h2>📀 ISO 扫描与分割</h2>
+      <p class="page-desc">扫描挂载目录中的 ISO → 识别 title/音轨/字幕 → 刮削匹配 → 预览命名 → 无损分割</p>
+      <div class="panel">
+        <h3>① 选择扫描目录</h3>
+        <div id="scanDirs" class="grid"></div>
+        <div class="btn-group" style="margin-top:14px">
+          <button class="btn primary" id="scanBtn" onclick="runScan()">🔍 扫描 ISO</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;color:var(--muted);cursor:pointer">
+            <input type="checkbox" id="selectAllMounts" checked onchange="toggleAllMounts()"> 全选挂载点</label>
+        </div>
+      </div>
+      <div class="panel" id="isoListPanel" style="display:none">
+        <h3>② ISO 列表 <span id="isoCount" class="badge acc">0</span>
+          <button class="btn mini" style="margin-left:auto" onclick="identifyAll()">🔄 批量识别</button></h3>
+        <table><thead><tr><th>文件</th><th>大小</th><th>修改时间</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody id="isoTable"></tbody></table>
+      </div>
+      <!-- 识别详情 -->
+      <div id="identArea" style="display:none"></div>
+      <!-- 刮削 -->
+      <div id="scrapeArea" style="display:none"></div>
+      <!-- 预览 -->
+      <div id="previewArea" style="display:none"></div>
+    </div>
+
+    <!-- 目录管理 -->
+    <div class="page" id="page-dirs">
+      <h2>📂 目录管理</h2>
+      <p class="page-desc">浏览容器挂载点（创建容器时用 -v 挂载多个目录），选择要扫描的目录</p>
+      <div class="panel">
+        <h3>挂载点</h3>
+        <div id="mountList" class="grid"></div>
+      </div>
+      <div class="panel" id="dirBrowserBox" style="display:none">
+        <h3>目录浏览</h3>
+        <div class="crumbs" id="dirCrumbs"></div>
+        <div class="grid" id="dirBrowserGrid"></div>
+      </div>
+    </div>
+
+    <!-- 任务进度 -->
+    <div class="page" id="page-tasks">
+      <h2>⚙️ 任务进度</h2>
+      <p class="page-desc">ISO 分割任务状态与日志</p>
+      <div class="panel">
+        <h3>任务列表 <button class="btn mini" style="margin-left:auto" onclick="loadTasks()">刷新</button></h3>
+        <div id="taskList"></div>
+      </div>
+      <div class="panel" id="historyPanel" style="display:none">
+        <h3>分割历史</h3>
+        <table><thead><tr><th>ISO</th><th>输出</th><th>状态</th><th>时间</th></tr></thead>
+        <tbody id="historyTable"></tbody></table>
+      </div>
+    </div>
+
+    <!-- 设置 -->
+    <div class="page" id="page-settings">
+      <h2>🔧 设置</h2>
+      <p class="page-desc">刮削源、命名模板、输出策略。设置保存在 /config/settings.json</p>
+      <div class="panel">
+        <h3>刮削配置</h3>
+        <div class="form-row"><label>TMDB API Key（留空则只用豆瓣）</label>
+          <input type="text" id="setTmdbKey" placeholder="填入 TMDB API v3 key"></div>
+        <div class="form-row"><label>TMDB API 地址（可填反代地址，解决直连不通）</label>
+          <input type="text" id="setTmdbBase" placeholder="https://api.themoviedb.org/3"></div>
+        <div class="form-row"><label>网络代理（可选，http://host:port，用于访问 TMDB）</label>
+          <input type="text" id="setProxy" placeholder="http://192.168.1.1:7890"></div>
+        <div class="form-row"><label>语言</label>
+          <select id="setLang"><option value="zh-CN">简体中文</option><option value="zh-TW">繁体中文</option>
+            <option value="en-US">English</option><option value="ja-JP">日本語</option></select></div>
+        <label style="display:inline-flex;gap:6px;align-items:center">
+          <input type="checkbox" id="setDouban"> 启用豆瓣网页搜索</label>
+      </div>
+      <div class="panel">
+        <h3>分割与命名</h3>
+        <div class="form-row"><label>剧集命名模板</label>
+          <input type="text" id="setNameTpl" placeholder="{title} - S{season:02d}E{episode:02d} - {epname}"></div>
+        <div class="form-row"><label>电影命名模板</label>
+          <input type="text" id="setMovieTpl" placeholder="{title} ({year})"></div>
+        <div class="form-row"><label>最小时长（秒，短于此的 title 默认不选，用于过滤预告/花絮）</label>
+          <input type="text" id="setMinDur" placeholder="300"></div>
+        <div class="form-row"><label>默认输出方式</label>
+          <select id="setOutMode"><option value="inplace">原地输出（ISO 同目录 _split 子文件夹）</option>
+            <option value="custom">指定路径</option></select></div>
+        <div class="form-row"><label>默认输出路径（当选择"指定路径"时）</label>
+          <input type="text" id="setOutPath" placeholder="/media/output"></div>
+      </div>
+      <div class="btn-group"><button class="btn primary" onclick="saveSettings()">💾 保存设置</button></div>
+      <div class="panel" id="sysInfo"></div>
+    </div>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+// ══ 全局状态 ══
+let curPage="scan", mounts=[], isos=[], curIso=null, ident=null, scrapeResult=null;
+let selectedScrape=null, preview=null, taskTimer=null;
+
+function esc(s){return String(s??"").replace(/[<>&"]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c]));}
+function fmtSize(b){b=+b||0;return b>1024**3?(b/1024**3).toFixed(2)+" GB":b>1024**2?(b/1024**2).toFixed(1)+" MB":b+" B";}
+function fmtDur(s){s=+s||0;return `${Math.floor(s/3600)}:${String(Math.floor(s%3600/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;}
+function toast(msg,type){const t=document.getElementById("toast");t.textContent=msg;
+  t.className="toast show"+(type?" "+type:"");clearTimeout(t._t);t._t=setTimeout(()=>t.className="toast",3200);}
+async function api(url,opt){try{const r=await fetch(url,opt);return await r.json();}catch(e){return {ok:false,error:String(e)};}}
+function post(url,data){return api(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data||{})});}
+
+// ══ 导航 ══
+document.querySelectorAll("nav a").forEach(a=>a.onclick=()=>{
+  document.querySelectorAll("nav a").forEach(x=>x.classList.remove("active"));
+  document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));
+  a.classList.add("active");curPage=a.dataset.page;
+  document.getElementById("page-"+curPage).classList.add("active");
+  if(curPage==="dirs"){loadMounts();}
+  if(curPage==="tasks"){loadTasks();}
+  if(curPage==="settings"){loadSettings();loadSysInfo();}
+  if(curPage==="scan"){loadScanState();}
+});
+
+// ══ 目录管理 ══
+async function loadMounts(){
+  const r=await api("/api/mounts");mounts=r.mounts||[];
+  const box=document.getElementById("mountList");box.innerHTML="";
+  mounts.forEach(m=>{
+    const c=document.createElement("div");c.className="file-card";
+    c.innerHTML=`<div class="fname">💾 ${esc(m.path)}</div>
+      <div class="fmeta">${esc(m.label)} · ${esc(m.fstype)}</div>
+      <div class="actions"><button class="btn mini">浏览</button></div>`;
+    c.querySelector("button").onclick=(e)=>{e.stopPropagation();openDirBrowser(m.path);};
+    c.onclick=()=>{addScanDir(m.path);curPage="scan";
+      document.querySelectorAll("nav a").forEach(x=>x.classList.toggle("active",x.dataset.page==="scan"));
+      document.querySelectorAll(".page").forEach(x=>x.classList.toggle("active",x.id==="page-scan"));};
+    box.appendChild(c);
+  });
+  renderScanDirs();
+}
+let scanDirs=new Set();
+function addScanDir(p){scanDirs.add(p);renderScanDirs();}
+function renderScanDirs(){
+  const box=document.getElementById("scanDirs");box.innerHTML="";
+  if(!scanDirs.size){box.innerHTML='<div class="hint">从「目录管理」选择目录，或点击下方挂载点卡片</div>';return;}
+  scanDirs.forEach(p=>{
+    const d=document.createElement("div");d.className="file-card";
+    d.innerHTML=`<div class="fname">📁 ${esc(p)}</div><div class="actions">
+      <button class="btn mini danger">移除</button></div>`;
+    d.querySelector("button").onclick=(e)=>{e.stopPropagation();scanDirs.delete(p);renderScanDirs();};
+    box.appendChild(d);
+  });
+}
+function toggleAllMounts(){const on=document.getElementById("selectAllMounts").checked;
+  scanDirs=on?new Set(mounts.map(m=>m.path)):new Set();renderScanDirs();}
+async function openDirBrowser(path){
+  document.getElementById("dirBrowserBox").style.display="block";await browseIn(path);
+}
+async function browseIn(path){
+  const r=await api("/api/browse"+(path?"?path="+encodeURIComponent(path):""));
+  if(!r.ok){toast(r.error,"err");return;}
+  const grid=document.getElementById("dirBrowserGrid");grid.innerHTML="";
+  const crumbs=document.getElementById("dirCrumbs");
+  crumbs.innerHTML=`<a onclick="browseIn(null)">挂载点列表</a>`;
+  if(r.parent)crumbs.innerHTML+=` / <a onclick="browseIn('${esc(r.parent)}')">..</a>`;
+  crumbs.innerHTML+=` / <b>${esc(r.path)}</b>`;
+  // 选当前目录按钮
+  const sel=document.createElement("div");sel.className="file-card";
+  sel.style.borderColor="var(--accent)";
+  sel.innerHTML=`<div class="fname">✅ 选定此目录</div><div class="fmeta">${esc(r.path)}</div>`;
+  sel.onclick=()=>{addScanDir(r.path);toast("已加入扫描目录: "+r.path,"ok");};
+  grid.appendChild(sel);
+  r.items.forEach(it=>{
+    const c=document.createElement("div");c.className="file-card";
+    c.innerHTML=`<div class="fname">${it.type==="dir"?"📁":"🎬"} ${esc(it.name)}</div>
+      <div class="fmeta">${it.type==="dir"?"目录":fmtSize(it.size)+" · "+it.mtime}</div>`;
+    if(it.type==="dir")c.onclick=()=>browseIn(it.path);
+    grid.appendChild(c);
+  });
+}
+
+// ══ 扫描 ══
+async function runScan(){
+  if(!scanDirs.size){toast("请先选择扫描目录","err");return;}
+  const btn=document.getElementById("scanBtn");btn.disabled=true;btn.innerHTML='<span class="spinner"></span> 扫描中';
+  const r=await post("/api/scan",{dirs:[...scanDirs]});
+  btn.disabled=false;btn.textContent="🔍 扫描 ISO";
+  if(!r.ok){toast(r.error,"err");return;}
+  isos=r.items||[];document.getElementById("isoListPanel").style.display="block";
+  document.getElementById("isoCount").textContent=isos.length;renderIsos();
+  toast(`扫描完成，找到 ${isos.length} 个 ISO`,"ok");
+}
+async function loadScanState(){
+  const r=await api("/api/scan_state");isos=r.items||[];
+  if(isos.length){document.getElementById("isoListPanel").style.display="block";
+    document.getElementById("isoCount").textContent=isos.length;renderIsos();}
+}
+function statusBadge(s){return {pending:'<span class="badge">待识别</span>',
+  identified:'<span class="badge acc">已识别</span>',scraped:'<span class="badge purple">已刮削</span>',
+  split:'<span class="badge green">已分割</span>'}[s]||'<span class="badge">'+esc(s)+'</span>';}
+function renderIsos(){
+  const tb=document.getElementById("isoTable");tb.innerHTML="";
+  isos.forEach((it,i)=>{
+    const tr=document.createElement("tr");tr.className="iso-row";
+    tr.innerHTML=`<td><b>${esc(it.name)}</b><br><span class="hint">${esc(it.dir)}</span></td>
+      <td>${fmtSize(it.size)}</td><td>${esc(it.mtime)}</td>
+      <td>${statusBadge(it.status)}${it.title_count?` <span class="badge">${it.title_count} titles</span>`:""}</td>
+      <td><button class="btn mini primary" onclick="event.stopPropagation();openIdentify(${i})">识别</button></td>`;
+    tr.onclick=()=>openIdentify(i);tb.appendChild(tr);
+  });
+}
+
+// ══ 批量识别 ══
+async function identifyAll(){
+  const pending=isos.filter(x=>x.status==="pending"||x.status==="split");
+  if(!pending.length){toast("没有待识别的 ISO，可点单行的识别按钮","err");return;}
+  const r=await post("/api/identify_all",{paths:pending.map(x=>x.path)});
+  if(!r.ok){toast(r.error,"err");return;}
+  toast(`已启动批量识别（${pending.length} 个），可在 5 秒后刷新列表`,"ok");
+  setTimeout(async()=>{await loadScanState();toast("识别已更新，请刷新查看状态","ok");},8000);
+}
+
+// ══ 识别详情 ══
+async function openIdentify(i){
+  curIso=isos[i];ident=null;scrapeResult=null;selectedScrape=null;preview=null;
+  document.getElementById("identArea").style.display="block";
+  document.getElementById("identArea").innerHTML=`<div class="panel"><h3>③ 识别: ${esc(curIso.name)}
+    <span class="spinner"></span></h3><div class="hint">正在调用 MakeMKV 读取光盘结构…</div></div>`;
+  document.getElementById("scrapeArea").style.display="none";
+  document.getElementById("previewArea").style.display="none";
+  const r=await post("/api/identify",{path:curIso.path});
+  if(!r.ok){document.getElementById("identArea").innerHTML=
+    `<div class="panel"><h3>③ 识别失败</h3><p style="color:var(--red)">${esc(r.error)}</p>
+     <p class="hint">蓝光光盘需要有效 MakeMKV key：请把 key 文件内容放到 <code>/config/keydata.txt</code> 后重启容器。DVD 无需 key。</p></div>`;
+    toast(r.error,"err");return;}
+  ident=r;renderIdent();
+}
+function renderIdent(){
+  const d=ident.disc||{},titles=ident.titles||[];
+  const tracks=t=>{
+    const a=(t.audio||[]).map(x=>`<span class="tag audio">🔊 ${esc(x.lang_name||x.lang||"und")} ${esc(x.codec)}</span>`).join("");
+    const s=(t.subtitles||[]).map(x=>`<span class="tag sub">💬 ${esc(x.lang_name||x.lang||"und")} ${esc(x.codec)}</span>`).join("");
+    return `<div class="track-list">${a}${s}</div>`;
+  };
+  document.getElementById("identArea").innerHTML=`<div class="panel">
+    <h3>③ 识别结果 <span class="badge acc">${esc(d.type||"光盘")}</span>
+      <span class="badge">${esc(d.volume||"")}</span>
+      <button class="btn mini" style="margin-left:auto" onclick="openIdentify(${isos.indexOf(curIso)})">重新识别</button></h3>
+    <p class="hint" style="margin-bottom:14px">共 ${titles.length} 个 title。默认勾选时长 ≥ 阈值的 title（预告/花絮通常较短）。音轨与字幕会被完整保留。</p>
+    <table><thead><tr><th>#</th><th>源</th><th>时长</th><th>大小</th><th>章节</th><th>音轨 / 字幕</th></tr></thead><tbody>
+    ${titles.map(t=>`<tr><td><b>${t.index}</b></td><td><span class="hint">${esc(t.source)}</span></td>
+      <td>${esc(t.duration_text)}</td><td>${t.size_gb} GB</td><td>${t.chapters}</td><td>${tracks(t)}</td></tr>`).join("")}
+    </tbody></table>
+    <div class="btn-group" style="margin-top:16px">
+      <button class="btn primary" onclick="goScrape()">➡️ 刮削匹配片名/集数</button>
+      <button class="btn" onclick="goManualPreview()">✋ 跳过刮削，手动分割</button>
+    </div>
+  </div>`;
+}
+
+// ══ 刮削 ══
+async function goScrape(){
+  document.getElementById("scrapeArea").style.display="block";
+  document.getElementById("scrapeArea").innerHTML=`<div class="panel"><h3>④ 刮削匹配 <span class="spinner"></span></h3></div>`;
+  const r=await post("/api/scrape",{path:curIso.path});
+  if(!r.ok){document.getElementById("scrapeArea").innerHTML=`<div class="panel"><h3>④ 刮削</h3>
+    <p style="color:var(--red)">${esc(r.error)}</p></div>`;return;}
+  scrapeResult=r;renderScrape();
+}
+function renderScrape(){
+  const r=scrapeResult,imgBase=document.getElementById("setTmdbBase")?null:null;
+  const results=r.results||[];
+  const poster=it=>it.poster?`https://image.tmdb.org/t/p/w92${it.poster}`:"";
+  const area=document.getElementById("scrapeArea");
+  area.innerHTML=`<div class="panel">
+    <h3>④ 刮削匹配 <span class="badge purple">查询: ${esc(r.query)}</span></h3>
+    <div class="form-row" style="display:flex;gap:8px;align-items:center">
+      <input type="text" id="manualName" placeholder="识别不准？手动输入片名后重新搜索" style="flex:1"
+        value="${esc(r.query)}">
+      <button class="btn" onclick="scrapeManual()">🔍 搜索</button></div>
+    ${results.length?`<p class="hint">选择匹配结果（自动识别集数需选剧集类）：</p><div id="candList"></div>`:
+      `<div class="empty"><div class="icon">🔍</div><p>未找到匹配结果——可手动输入片名重搜，或直接手动分割</p>
+       ${(r.errors||[]).map(e=>`<p class="hint" style="color:var(--orange)">${esc(e)}</p>`).join("")}</div>`}
+    <div class="btn-group">
+      <button class="btn" onclick="goManualPreview()">✋ 手动分割（不刮削）</button>
+    </div>
+  </div>`;
+  const list=document.getElementById("candList");
+  if(list){
+    results.forEach((it,i)=>{
+      const c=document.createElement("div");c.className="candidate";
+      c.innerHTML=`${poster(it)?`<img src="${poster(it)}" onerror="this.style.display='none'">`:"<img style='display:none'>"}
+        <div class="info"><h4>${esc(it.title)} <span class="badge ${it.media_type==='tv'?'acc':'green'}">${it.media_type==='tv'?'剧集':'电影'}</span>
+          ${esc(it.year)}</h4><p>${esc(it.original_title&&it.original_title!==it.title?it.original_title+" · ":"")}${esc(it.overview)}</p>
+          <span class="hint">来源: ${esc(it.provider===tmdbKeySource()?'TMDB':it.provider)} · ID ${it.id}</span></div>`;
+      c.onclick=()=>selectCandidate(it);
+      list.appendChild(c);
+    });
+  }
+}
+function tmdbKeySource(){return "tmdb";}
+async function scrapeManual(){
+  const name=document.getElementById("manualName").value.trim();
+  if(!name){toast("请输入片名","err");return;}
+  document.getElementById("scrapeArea").innerHTML=`<div class="panel"><h3>④ 刮削匹配 <span class="spinner"></span></h3></div>`;
+  const r=await post("/api/scrape",{path:curIso.path,name});
+  if(!r.ok){toast(r.error,"err");return;}
+  scrapeResult=r;renderScrape();
+}
+async function selectCandidate(it){
+  selectedScrape=it;
+  // 取详情(剧集则加载分集)
+  const btn=event&&event.target;
+  const r=await post("/api/scrape/details",{id:it.id,media_type:it.media_type,
+    provider:it.provider||"tmdb"});
+  if(r.ok&&r.details){selectedScrape={...it,...r.details};}
+  goPreview();
+}
+
+// ══ 手动预览(无刮削) ══
+function goManualPreview(){
+  selectedScrape={title:"",year:"",media_type:"movie",episodes:[]};
+  goPreview();
+}
+
+// ══ 分割预览 ══
+async function goPreview(){
+  document.getElementById("previewArea").style.display="block";
+  document.getElementById("previewArea").innerHTML=`<div class="panel"><h3>⑤ 分割预览 <span class="spinner"></span></h3></div>`;
+  const r=await post("/api/preview",{path:curIso.path,scrape:selectedScrape||{},overrides:{}});
+  if(!r.ok){toast(r.error,"err");return;}
+  preview=r;renderPreview();
+}
+function renderPreview(){
+  const p=preview,rows=p.preview||[];
+  const area=document.getElementById("previewArea");
+  area.innerHTML=`<div class="panel">
+    <h3>⑤ 分割预览 <span class="badge acc">${p.selected_count} 个 title 将被导出</span></h3>
+    <p class="hint" style="margin-bottom:14px">可修改每个 title 的勾选与输出文件名。MakeMKV 无损 remux，保留全部音轨/字幕/章节。</p>
+    <div class="form-row" style="display:flex;gap:20px;flex-wrap:wrap">
+      <label style="display:inline-flex;gap:6px;align-items:center">输出方式</label>
+      <select id="outMode" onchange="toggleOutPath()">
+        <option value="inplace">原地输出（ISO 同目录 _split 文件夹）</option>
+        <option value="custom">指定路径</option></select>
+      <input type="text" id="outPath" placeholder="/media/output" style="display:none;min-width:240px">
+    </div>
+    <div class="split-preview" style="overflow:auto"><table>
+      <thead><tr><th>导出</th><th>#</th><th>时长/大小</th><th>音轨·字幕</th><th>输出文件名</th></tr></thead>
+      <tbody id="previewBody"></tbody></table></div>
+    <div class="btn-group" style="margin-top:16px">
+      <button class="btn green" onclick="startSplit()">🚀 开始分割</button>
+      <button class="btn" onclick="goScrape()">← 重新刮削</button>
+    </div>
+  </div>`;
+  const tb=document.getElementById("previewBody");
+  rows.forEach((t,i)=>{
+    const tr=document.createElement("tr");if(!t.selected)tr.className="excluded";
+    const tracks=[...(t.audio||[]).map(x=>`<span class="tag audio">🔊${esc(x.lang_name||x.lang||"")} ${esc(x.codec)}</span>`),
+      ...(t.subtitles||[]).map(x=>`<span class="tag sub">💬${esc(x.lang_name||x.lang||"")} ${esc(x.codec)}</span>`)].join("");
+    tr.innerHTML=`<td><input type="checkbox" data-idx="${i}" ${t.selected?"checked":""} onchange="toggleRow(this)"></td>
+      <td><b>${t.index}</b>${t.episode?`<br><span class="badge acc">E${t.episode}</span>`:""}</td>
+      <td>${esc(t.duration_text)}<br><span class="hint">${t.size_gb} GB · ${t.chapters}章</span></td>
+      <td><div class="track-list">${tracks||'<span class="hint">无</span>'}</div></td>
+      <td><input type="text" data-idx="${i}" value="${esc(t.new_name)}"></td>`;
+    tb.appendChild(tr);
+  });
+}
+function toggleOutPath(){document.getElementById("outPath").style.display=
+  document.getElementById("outMode").value==="custom"?"inline-block":"none";}
+function toggleRow(cb){cb.closest("tr").classList.toggle("excluded",!cb.checked);}
+
+async function startSplit(){
+  const rows=preview.preview;
+  const cbs=document.querySelectorAll("#previewBody input[type=checkbox]");
+  const names=document.querySelectorAll("#previewBody input[type=text]");
+  const selected=[],renames=[];
+  cbs.forEach((cb,i)=>{if(cb.checked){selected.push(rows[i].index);renames.push(names[i].value.trim());}});
+  if(!selected.length){toast("请至少勾选一个 title","err");return;}
+  const mode=document.getElementById("outMode").value;
+  const outputPath=document.getElementById("outPath").value.trim();
+  const r=await post("/api/split",{path:curIso.path,selected,renames,
+    output_mode:mode,output_path:outputPath});
+  if(!r.ok){toast(r.error,"err");return;}
+  toast(`分割任务已启动（${selected.length} 个 title）`,"ok");
+  curPage="tasks";
+  document.querySelectorAll("nav a").forEach(x=>x.classList.toggle("active",x.dataset.page==="tasks"));
+  document.querySelectorAll(".page").forEach(x=>x.classList.toggle("active",x.id==="page-tasks"));
+  loadTasks();
+}
+
+// ══ 任务 ══
+async function loadTasks(){
+  const r=await api("/api/tasks");const tasks=r.tasks||[];
+  const box=document.getElementById("taskList");
+  if(!tasks.length){box.innerHTML='<div class="empty"><div class="icon">⚙️</div><p>暂无任务</p></div>';return;}
+  box.innerHTML=tasks.map(t=>{
+    const st={queued:'<span class="badge">排队中</span>',running:'<span class="badge acc">进行中</span>',
+      done:'<span class="badge green">完成</span>',failed:'<span class="badge red">失败</span>'}[t.status]||t.status;
+    return `<div class="panel" style="margin-bottom:12px">
+      <h3>${esc(t.path.split("/").pop())} ${st}
+        <span class="hint" style="margin-left:auto">${esc(t.created_at?t.created_at.replace("T"," ").slice(0,19):"")}</span></h3>
+      <div class="hint">输出: ${esc(t.output)} · ${t.title_count} 个 title</div>
+      <div class="progress-wrap"><div class="progress-bar" style="width:${t.progress||0}%"></div></div>
+      <div class="hint">${t.progress||0}% ${t.error?'<span style="color:var(--red)">'+esc(t.error)+'</span>':""}</div>
+      ${t.log&&t.log.length?`<div class="log-box" style="margin-top:10px">${t.log.map(esc).join("\n")}</div>`:""}
+    </div>`;
+  }).join("");
+  // 历史
+  const h=await api("/api/history");
+  if(h.history&&h.history.length){
+    document.getElementById("historyPanel").style.display="block";
+    document.getElementById("historyTable").innerHTML=h.history.map(x=>
+      `<tr><td>${esc(x.path.split("/").pop())}</td><td class="hint">${esc(x.output)}</td>
+       <td>${x.status==="done"?'<span class="badge green">完成</span>':'<span class="badge red">失败</span>'}</td>
+       <td>${esc(x.at.replace("T"," ").slice(0,19))}</td></tr>`).join("");
+  }
+}
+
+// ══ 设置 ══
+async function loadSettings(){
+  const r=await api("/api/settings");const s=r.settings||{};
+  document.getElementById("setTmdbKey").value=s.tmdb_api_key||"";
+  document.getElementById("setTmdbBase").value=s.tmdb_api_base||"";
+  document.getElementById("setProxy").value=s.proxy||"";
+  document.getElementById("setLang").value=s.language||"zh-CN";
+  document.getElementById("setDouban").checked=!!s.douban_enabled;
+  document.getElementById("setNameTpl").value=s.name_template||"";
+  document.getElementById("setMovieTpl").value=s.movie_template||"";
+  document.getElementById("setMinDur").value=s.min_title_seconds||"";
+  document.getElementById("setOutMode").value=s.output_mode||"inplace";
+  document.getElementById("setOutPath").value=s.output_path||"";
+}
+async function saveSettings(){
+  const s={tmdb_api_key:document.getElementById("setTmdbKey").value.trim(),
+    tmdb_api_base:document.getElementById("setTmdbBase").value.trim()||"https://api.themoviedb.org/3",
+    proxy:document.getElementById("setProxy").value.trim(),
+    language:document.getElementById("setLang").value,
+    douban_enabled:document.getElementById("setDouban").checked,
+    name_template:document.getElementById("setNameTpl").value.trim()||"{title} - S{season:02d}E{episode:02d} - {epname}",
+    movie_template:document.getElementById("setMovieTpl").value.trim()||"{title} ({year})",
+    min_title_seconds:parseInt(document.getElementById("setMinDur").value)||300,
+    output_mode:document.getElementById("setOutMode").value,
+    output_path:document.getElementById("setOutPath").value.trim()};
+  const r=await post("/api/settings",s);
+  toast(r.ok?"设置已保存":"保存失败",r.ok?"ok":"err");loadSysInfo();
+}
+async function loadSysInfo(){
+  const r=await api("/api/system");
+  document.getElementById("sysInfo").innerHTML=`<h3>系统信息</h3>
+    <table><tr><td>MakeMKV</td><td>${esc(r.makemkv||"—")} ${r.makemkv_ok?'<span class="badge green">就绪</span>':'<span class="badge red">异常</span>'}</td></tr>
+    <tr><td>ffmpeg</td><td>${esc(r.ffmpeg||"—")}</td></tr>
+    <tr><td>/config 可用空间</td><td>${r.disk_free_gb} GB</td></tr>
+    <tr><td>MakeMKV Key</td><td>${r.key_configured?'<span class="badge green">已配置（蓝光可用）</span>':'<span class="badge orange">未配置（DVD 仍可用）</span>'}</td></tr></table>`;
+}
+
+// ══ 初始化 ══
+loadMounts();loadScanState();
+taskTimer=setInterval(()=>{if(curPage==="tasks")loadTasks();},4000);
+</script>
+</body>
+</html>

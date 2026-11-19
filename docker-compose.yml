@@ -1,0 +1,25 @@
+services:
+  iso-splitter:
+    build: .
+    image: iso-splitter:latest
+    container_name: iso-splitter
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    environment:
+      # TMDB API v3 key (可选; 留空则只用豆瓣 + 手动输入)
+      - TMDB_API_KEY=
+      # 网络代理 (可选; 用于容器所在网络无法直连 TMDB 时)
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+    volumes:
+      # 配置持久化: settings.json / 扫描缓存 / 任务历史 / keydata.txt / 日志
+      - ./config:/config
+      # ↓↓↓ 按需添加任意多个目录挂载, 容器内路径可自由命名 ↓↓↓
+      # ISO 源目录 (可直接挂宿主机的光盘库)
+      - /data/isos:/media/isos
+      # 输出目录 (若选择输出到指定路径)
+      - /data/output:/media/output
+      # 更多目录示例:
+      # - /volume1/Bluray:/media/bluray
+      # - /volume2/DVD:/media/dvd
