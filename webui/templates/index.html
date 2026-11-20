@@ -224,6 +224,18 @@ tr:hover td{background:rgba(255,255,255,.02)}
         <div class="form-row"><label>默认输出路径（当选择"指定路径"时）</label>
           <input type="text" id="setOutPath" placeholder="/media/output"></div>
       </div>
+      <div class="panel" id="keyPanel">
+        <h3>MakeMKV Key（蓝光解密）</h3>
+        <div id="keyStatus" class="hint">加载中…</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0">
+          <button class="btn primary" id="btnFetchKey" onclick="fetchKey()">🔑 一键获取最新 Key</button>
+          <label style="display:inline-flex;gap:6px;align-items:center">
+            <input type="checkbox" id="setKeyAuto"> 周期自动获取替换</label>
+          <span>每 <input type="text" id="setKeyHours" style="width:56px" placeholder="72"> 小时检查一次</span>
+          <button class="btn mini" onclick="saveKeySettings()">保存周期设置</button>
+        </div>
+        <p class="hint" style="margin:0">从 MakeMKV 官方论坛自动获取 beta key（有效期通常数月）。DVD 无加密，无需 key；蓝光需有效 key。启用周期自动后，容器后台会按间隔检查并替换过期 key，无需重启。</p>
+      </div>
       <div class="btn-group"><button class="btn primary" onclick="saveSettings()">💾 保存设置</button></div>
       <div class="panel" id="sysInfo"></div>
     </div>
@@ -251,7 +263,7 @@ document.querySelectorAll("nav a").forEach(a=>a.onclick=()=>{
   document.getElementById("page-"+curPage).classList.add("active");
   if(curPage==="dirs"){loadMounts();}
   if(curPage==="tasks"){loadTasks();}
-  if(curPage==="settings"){loadSettings();loadSysInfo();}
+  if(curPage==="settings"){loadSettings();loadSysInfo();loadKeyStatus();}
   if(curPage==="scan"){loadScanState();}
 });
 
@@ -585,6 +597,38 @@ async function loadSysInfo(){
     <tr><td>ffmpeg</td><td>${esc(r.ffmpeg||"—")}</td></tr>
     <tr><td>/config 可用空间</td><td>${r.disk_free_gb} GB</td></tr>
     <tr><td>MakeMKV Key</td><td>${r.key_configured?'<span class="badge green">已配置（蓝光可用）</span>':'<span class="badge orange">未配置（DVD 仍可用）</span>'}</td></tr></table>`;
+}
+
+// ══ MakeMKV Key 管理 ══
+async function loadKeyStatus(){
+  const r=await api("/api/key/status");
+  const box=document.getElementById("keyStatus");
+  if(!r.ok){box.innerHTML='<span class="badge red">状态读取失败</span>';return;}
+  const bits=[];
+  bits.push(r.configured?`<span class="badge green">已配置</span> <code>${esc(r.key)}</code>`:'<span class="badge orange">未配置</span>');
+  if(r.expire)bits.push(`有效期：<b>${esc(r.expire)}</b>`);
+  if(r.source)bits.push(`来源：${esc(r.source)}`);
+  if(r.last_applied)bits.push(`上次更新：${esc(r.last_applied.replace("T"," ").slice(0,19))}`);
+  if(r.last_error)bits.push(`<span class="badge red">${esc(r.last_error)}</span>`);
+  box.innerHTML=bits.join(" &nbsp;·&nbsp; ");
+  document.getElementById("setKeyAuto").checked=!!r.auto_update;
+  document.getElementById("setKeyHours").value=r.update_hours||72;
+}
+async function fetchKey(){
+  const btn=document.getElementById("btnFetchKey");
+  btn.disabled=true;btn.textContent="⏳ 获取中…";
+  const r=await post("/api/key/fetch",{});
+  btn.disabled=false;btn.textContent="🔑 一键获取最新 Key";
+  if(r.ok){toast((r.changed?"已获取并应用新 Key":"Key 已是最新")+"（"+r.key+"）","ok");}
+  else{toast("获取失败："+(r.error||"未知错误"),"err");}
+  loadKeyStatus();loadSysInfo();
+}
+async function saveKeySettings(){
+  const r=await post("/api/key/settings",{
+    auto_update:document.getElementById("setKeyAuto").checked,
+    update_hours:parseInt(document.getElementById("setKeyHours").value)||72});
+  toast(r.ok?"周期设置已保存":"保存失败",r.ok?"ok":"err");
+  loadKeyStatus();
 }
 
 // ══ 初始化 ══

@@ -69,6 +69,9 @@ def load_settings():
         "output_mode": "inplace",   # inplace | custom
         "output_path": "",
         "auto_scrape": True,
+        # MakeMKV beta key 自动管理
+        "key_auto_update": False,      # 是否启用周期自动获取
+        "key_update_hours": 72,        # 自动获取间隔(小时)
     }
     base.update(s)
     return base
@@ -83,6 +86,117 @@ def requests_session():
     if proxy:
         sess.proxies = {"http": proxy, "https": proxy}
     return sess
+
+# ══════════════════════════════════════════════════════════════
+# MakeMKV beta key: 抓取 / 解析 / 写入 / 周期更新
+# 参考 jlesage/docker-makemkv 的成熟实现, 适配当前论坛页面(<code> 格式)
+# ══════════════════════════════════════════════════════════════
+KEY_SOURCE_URL = "https://forum.makemkv.com/forum/viewtopic.php?f=5&t=1053"
+KEY_STATE_FILE = CONFIG_DIR / "key_state.json"
+KEY_FILE = CONFIG_DIR / "keydata.txt"            # 用户自定义 key(优先级高于自动获取)
+MAKEMKV_CONF = Path(os.environ.get("JIS_MAKEMKV_CONF", "/root/.MakeMKV/settings.conf"))
+
+def _read_current_key():
+    """读取 MakeMKV 配置文件中当前生效的 app_Key"""
+    try:
+        if MAKEMKV_CONF.exists():
+            m = re.search(r'^\s*app_Key\s*=\s*"([^"]+)"', MAKEMKV_CONF.read_text(encoding="utf-8", errors="ignore"), re.M)
+            if m:
+                return m.group(1).strip()
+    except Exception:
+        pass
+    return ""
+
+def _write_makemkv_key(key):
+    """把 key 写入 MakeMKV 配置(幂等), 同时写 /config/keydata.txt 供重启后 entrypoint 载入"""
+    key = (key or "").strip()
+    if not key:
+        return False, "key 为空"
+    try:
+        MAKEMKV_CONF.parent.mkdir(parents=True, exist_ok=True)
+        text = MAKEMKV_CONF.read_text(encoding="utf-8", errors="ignore") if MAKEMKV_CONF.exists() else ""
+        if re.search(r'^\s*app_Key\s*=', text, re.M):
+            text = re.sub(r'^\s*app_Key\s*=.*$', f'app_Key = "{key}"', text, flags=re.M)
+        else:
+            text = text.rstrip() + f'\napp_Key = "{key}"\n'
+        MAKEMKV_CONF.write_text(text, encoding="utf-8")
+        KEY_FILE.write_text(f'app_Key = "{key}"\n', encoding="utf-8")
+        return True, "ok"
+    except Exception as e:
+        log(f"write key err {e}")
+        return False, str(e)
+
+def fetch_makemkv_key():
+    """从官方论坛抓取最新 beta key。返回 (key, expire_text, error)"""
+    try:
+        sess = requests.Session()
+        sess.headers.update({"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"})
+        resp = sess.get(KEY_SOURCE_URL, timeout=25)
+        if resp.status_code != 200:
+            return "", "", f"论坛返回 HTTP {resp.status_code}"
+        html = resp.text
+        # 当前格式: <code>T-XXXX</code>; 兼容旧的反引号格式
+        m = re.search(r'<code>([^<]+)</code>', html)
+        if not m:
+            m = re.search(r'`([^`]+)`', html)
+        key = m.group(1).strip() if m else ""
+        # 校验: beta key 通常以 T- 开头且长度足够
+        if not key or len(key) < 30 or not key.startswith("T-"):
+            return "", "", "未解析到有效 beta key(页面格式可能已变更)"
+        exp = re.search(r'valid until ([^.<]+)', html, re.I)
+        expire = exp.group(1).strip() if exp else ""
+        return key, expire, ""
+    except Exception as e:
+        return "", "", str(e)
+
+def apply_fetched_key(manual=False):
+    """抓取并应用最新 key, 更新状态文件。返回 dict 结果"""
+    st = load_json(KEY_STATE_FILE, {})
+    key, expire, err = fetch_makemkv_key()
+    if err:
+        log(f"key fetch failed: {err}")
+        st.update({"last_check": datetime.now().isoformat(), "last_error": err, "ok": False})
+        save_json(KEY_STATE_FILE, st)
+        return {"ok": False, "error": err, "state": st}
+    changed = key != st.get("key") or key != _read_current_key()
+    if changed or manual:
+        ok, werr = _write_makemkv_key(key)
+        if not ok:
+            st.update({"last_check": datetime.now().isoformat(), "last_error": werr, "ok": False})
+            save_json(KEY_STATE_FILE, st)
+            return {"ok": False, "error": werr, "state": st}
+    st.update({
+        "ok": True,
+        "key": key,
+        "masked": key[:6] + "..." + key[-6:],
+        "expire": expire,
+        "source": "auto",
+        "last_check": datetime.now().isoformat(),
+        "last_applied": datetime.now().isoformat() if (changed or manual) else st.get("last_applied"),
+        "last_error": "",
+    })
+    save_json(KEY_STATE_FILE, st)
+    log(f"key applied: {st['masked']} (expire {expire})")
+    return {"ok": True, "changed": bool(changed), "key": st["masked"], "expire": expire, "state": st}
+
+def key_auto_worker():
+    """后台守护: 按 settings 中的间隔周期自动检查更新 key"""
+    while True:
+        s = load_settings()
+        hours = s.get("key_update_hours", 72)
+        try:
+            hours = max(1, int(hours))
+        except Exception:
+            hours = 72
+        time.sleep(hours * 3600)
+        try:
+            s = load_settings()
+            if s.get("key_auto_update"):
+                apply_fetched_key()
+        except Exception as e:
+            log(f"key auto worker err {e}")
+
+threading.Thread(target=key_auto_worker, daemon=True).start()
 
 # ══════════════════════════════════════════════════════════════
 # 挂载点发现与目录浏览
@@ -258,6 +372,42 @@ def api_settings():
         save_settings(s)
         return jsonify({"ok": True, "settings": s})
     return jsonify({"ok": True, "settings": load_settings()})
+
+@app.route("/api/key/status")
+def api_key_status():
+    st = load_json(KEY_STATE_FILE, {})
+    current = _read_current_key()
+    s = load_settings()
+    return jsonify({
+        "ok": True,
+        "configured": bool(current),
+        "key": (current[:6] + "..." + current[-6:]) if current else "",
+        "expire": st.get("expire", ""),
+        "source": st.get("source", ""),
+        "last_check": st.get("last_check", ""),
+        "last_applied": st.get("last_applied", ""),
+        "last_error": st.get("last_error", ""),
+        "auto_update": s.get("key_auto_update", False),
+        "update_hours": s.get("key_update_hours", 72),
+    })
+
+@app.route("/api/key/fetch", methods=["POST"])
+def api_key_fetch():
+    return jsonify(apply_fetched_key(manual=True))
+
+@app.route("/api/key/settings", methods=["POST"])
+def api_key_settings():
+    data = request.get_json(silent=True) or {}
+    s = load_settings()
+    if "auto_update" in data:
+        s["key_auto_update"] = bool(data["auto_update"])
+    if "update_hours" in data:
+        try:
+            s["key_update_hours"] = max(1, min(720, int(data["update_hours"])))
+        except Exception:
+            pass
+    save_settings(s)
+    return jsonify({"ok": True, "auto_update": s["key_auto_update"], "update_hours": s["key_update_hours"]})
 
 # ══════════════════════════════════════════════════════════════
 # 路由: 系统信息 / 日志

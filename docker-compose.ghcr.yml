@@ -1,0 +1,35 @@
+services:
+  splitter:
+    image: ghcr.io/songboxiang/splitter:latest
+    container_name: splitter
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+
+    environment:
+      # 容器内部端口（如需改宿主端口，改上面 ports 左边即可）
+      - WEBUI_PORT=8088
+
+      # 蓝光 ISO 解密 key（DVD 不需要，可整行删掉此项）
+      # 也可以把 key 内容放到 ./config/keydata.txt，二选一
+      - MAKEMKV_KEY=
+
+      # 网络代理（可选）：容器所在网络无法直连 TMDB 时填写，requests 会自动使用
+      # 若已在 WebUI 设置页里配置了反代 tmdb_api_base，这里可留空
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+      - NO_PROXY=localhost,127.0.0.1
+
+    volumes:
+      # 配置持久化：settings.json / 扫描缓存 / 任务历史 / 日志 / keydata.txt
+      - ./config:/config
+
+      # ===== 按需挂载任意多个目录，容器内路径可自由命名 =====
+      # ISO 源目录（宿主机路径 : 容器内路径）
+      - /data/isos:/media/isos
+      # 输出目录（选择「指定路径输出」时用）
+      - /data/output:/media/output
+
+      # 更多目录示例（取消注释即可，WebUI 会自动发现挂载点）：
+      # - /volume1/Bluray:/media/bluray
+      # - /volume2/DVD:/media/dvd
