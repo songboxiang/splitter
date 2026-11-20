@@ -129,7 +129,7 @@ def _write_makemkv_key(key):
 def fetch_makemkv_key():
     """从官方论坛抓取最新 beta key。返回 (key, expire_text, error)"""
     try:
-        sess = requests.Session()
+        sess = requests_session()  # 复用设置页配置的代理
         sess.headers.update({"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"})
         resp = sess.get(KEY_SOURCE_URL, timeout=25)
         if resp.status_code != 200:
