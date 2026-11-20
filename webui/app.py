@@ -571,8 +571,17 @@ def _makemkv_hints(text, err=""):
     """从 makemkvcon 原始输出中提取诊断线索, 返回 (key_related: bool, hints: str)"""
     raw = (text or "") + "\n" + (err or "")
     low = raw.lower()
-    key_words = ["aacs", "decrypt", "key", "evaluation", "trial", "license", "bd+", "libredrive"]
-    key_related = any(w in low for w in key_words)
+    # "AACS directory not present" / "assuming unencrypted disc" 表示盘未加密, 不是 key 错误
+    benign = ["aacs directory not present", "assuming unencrypted", "no aacs", "unencrypted disc"]
+    scrubbed = low
+    for b in benign:
+        scrubbed = scrubbed.replace(b, " ")
+    # 真正的解密/key 失败关键词
+    key_words = ["aacs authentication failed", "failed to decrypt", "decryption failed",
+                 "evaluation period", "trial period", "license", "bd+", "libredrive",
+                 "invalid key", "key expired", "can't find key", "cannot find key",
+                 "no usable key", "key not found", "authentication failed"]
+    key_related = any(w in scrubbed for w in key_words)
     # 抽取有信息量的 MSG 行: 取引号内首个非占位符的可读文本
     msgs = []
     for ln in (text or "").splitlines():
@@ -604,10 +613,21 @@ def api_identify():
     key_related, hints = _makemkv_hints(text, err)
     log(f"identify diag key_related={key_related} hints={hints[:200]}")
     if not text.strip():
-        return jsonify({"ok": False, "error": err or "无法读取 ISO 信息", "key_related": key_related, "hints": hints})
+        return jsonify({"ok": False, "error": err or "无法读取 ISO 信息", "key_related": key_related,
+                        "hints": hints, "likely_cause": "empty_output"})
     parsed = parse_makemkv_info(text)
     if not parsed["titles"]:
-        return jsonify({"ok": False, "error": "未识别到任何 title", "key_related": key_related, "hints": hints})
+        low = (text or "").lower()
+        if "unencrypted" in low or "aacs directory not present" in low:
+            cause = "unencrypted_no_title"   # 盘被识别为未加密, 但没有视频 title -> ISO 结构问题
+        elif key_related:
+            cause = "key_related"
+        elif "failed to open disc" in low or "input parameter is incorrect" in low:
+            cause = "bad_iso"
+        else:
+            cause = "unknown"
+        return jsonify({"ok": False, "error": "未识别到任何 title", "key_related": key_related,
+                        "hints": hints, "likely_cause": cause})
     parsed["identified_at"] = datetime.now().isoformat()
     parsed["path"] = path
     cache[path] = parsed

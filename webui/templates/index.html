@@ -377,15 +377,19 @@ async function openIdentify(i){
   const r=await post("/api/identify",{path:curIso.path});
   if(!r.ok){
     let extra="";
-    if(r.key_related){
+    if(r.likely_cause==="unencrypted_no_title"){
+      extra=`<p class="hint" style="color:var(--orange)"><b>这不是 key 问题。</b>MakeMKV 已成功打开镜像并判断为「未加密盘」，但盘内没有它认识的视频 title。常见原因：这是数据盘/游戏盘/软件盘、镜像是单个 MKV/MP4 文件打包而成（非原始 DVD-Video/BDMV 结构）、或镜像经过二次处理破坏了目录结构。<br>建议：确认 ISO 是从原盘完整备份的（DVD 含 <code>VIDEO_TS</code>，蓝光含 <code>BDMV</code>），而不是把视频文件重新打包成的 iso。</p>`;
+    } else if(r.key_related){
       try{const ks=await api("/api/key/status");
-        extra=`<p class="hint">MakeMKV 报告了与解密/key 相关的错误。当前 key 状态：<b style="color:${ks.configured?'var(--green)':'var(--red)'}">${ks.configured?'已配置 ('+esc(ks.key||'')+')':'未配置'}</b>。${ks.configured?'若 key 已配置仍失败，可能是该盘的 AACS 版本较新、需要更新 MakeMKV，或 ISO 非标准结构。':'可到「设置」页点「一键获取最新 Key」，成功后重试（无需重启）。'}</p>`;
+        extra=`<p class="hint">MakeMKV 报告了与解密/key 相关的错误。当前 key 状态：<b style="color:${ks.configured?'var(--green)':'var(--red)'}">${ks.configured?'已配置 ('+esc(ks.key||'')+')':'未配置'}</b>。${ks.configured?'若 key 已配置仍失败，可能是该盘 AACS 版本较新需更新 MakeMKV，或需为 4K UHD 盘配置 LibreDrive。':'可到「设置」页点「一键获取最新 Key」，成功后重试（无需重启）。'}</p>`;
       }catch(e){}
+    } else if(r.likely_cause==="bad_iso"){
+      extra=`<p class="hint">镜像读取报错，可能 ISO 损坏或结构不完整。建议重新制作镜像（DVD 用 <code>VIDEO_TS</code>，蓝光用 <code>BDMV</code> 完整备份）。</p>`;
     }
     document.getElementById("identArea").innerHTML=
     `<div class="panel"><h3>③ 识别失败</h3><p style="color:var(--red)">${esc(r.error)}</p>
      ${r.hints?`<p class="hint">MakeMKV 原始信息：${esc(r.hints)}</p>`:''}
-     ${extra||'<p class="hint">若这是数据盘或镜像不完整，MakeMKV 不会找到视频 title；DVD 无需 key。</p>'}</div>`;
+     ${extra||'<p class="hint">MakeMKV 未找到视频 title。若这是数据盘或镜像不完整属正常现象；DVD 无需 key。</p>'}</div>`;
     toast(r.error,"err");return;}
   ident=r;renderIdent();
 }
