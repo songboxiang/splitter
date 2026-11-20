@@ -567,6 +567,25 @@ def run_makemkv_info(iso_path, timeout=300):
     except Exception as e:
         return "", str(e)
 
+def _makemkv_hints(text, err=""):
+    """从 makemkvcon 原始输出中提取诊断线索, 返回 (key_related: bool, hints: str)"""
+    raw = (text or "") + "\n" + (err or "")
+    low = raw.lower()
+    key_words = ["aacs", "decrypt", "key", "evaluation", "trial", "license", "bd+", "libredrive"]
+    key_related = any(w in low for w in key_words)
+    # 抽取有信息量的 MSG 行: 取引号内首个非占位符的可读文本
+    msgs = []
+    for ln in (text or "").splitlines():
+        if not ln.startswith("MSG:"):
+            continue
+        for q in re.findall(r'"([^"]*)"', ln):
+            q = q.strip()
+            if q and not q.startswith("%") and q not in msgs:
+                msgs.append(q)
+                break  # 每行只取第一条可读文本
+    hint = "；".join(msgs[:6])
+    return key_related, hint
+
 # 识别缓存: path -> {disc, titles, identified_at}
 IDENT_FILE = CONFIG_DIR / "identify.json"
 
@@ -582,11 +601,13 @@ def api_identify():
         return jsonify({"ok": True, **cache[path], "cached": True})
     log(f"identify {path}")
     text, err = run_makemkv_info(path)
+    key_related, hints = _makemkv_hints(text, err)
+    log(f"identify diag key_related={key_related} hints={hints[:200]}")
     if not text.strip():
-        return jsonify({"ok": False, "error": err or "无法读取 ISO 信息(蓝光光盘可能需要有效的 MakeMKV key)"})
+        return jsonify({"ok": False, "error": err or "无法读取 ISO 信息", "key_related": key_related, "hints": hints})
     parsed = parse_makemkv_info(text)
     if not parsed["titles"]:
-        return jsonify({"ok": False, "error": "未识别到任何 title。" + ("蓝光需要 key: 请把 key 放到 /config/keydata.txt" if "blu" in text.lower() else "")})
+        return jsonify({"ok": False, "error": "未识别到任何 title", "key_related": key_related, "hints": hints})
     parsed["identified_at"] = datetime.now().isoformat()
     parsed["path"] = path
     cache[path] = parsed

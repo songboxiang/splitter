@@ -375,9 +375,17 @@ async function openIdentify(i){
   document.getElementById("scrapeArea").style.display="none";
   document.getElementById("previewArea").style.display="none";
   const r=await post("/api/identify",{path:curIso.path});
-  if(!r.ok){document.getElementById("identArea").innerHTML=
+  if(!r.ok){
+    let extra="";
+    if(r.key_related){
+      try{const ks=await api("/api/key/status");
+        extra=`<p class="hint">MakeMKV 报告了与解密/key 相关的错误。当前 key 状态：<b style="color:${ks.configured?'var(--green)':'var(--red)'}">${ks.configured?'已配置 ('+esc(ks.key||'')+')':'未配置'}</b>。${ks.configured?'若 key 已配置仍失败，可能是该盘的 AACS 版本较新、需要更新 MakeMKV，或 ISO 非标准结构。':'可到「设置」页点「一键获取最新 Key」，成功后重试（无需重启）。'}</p>`;
+      }catch(e){}
+    }
+    document.getElementById("identArea").innerHTML=
     `<div class="panel"><h3>③ 识别失败</h3><p style="color:var(--red)">${esc(r.error)}</p>
-     <p class="hint">蓝光光盘需要有效 MakeMKV key：请把 key 文件内容放到 <code>/config/keydata.txt</code> 后重启容器。DVD 无需 key。</p></div>`;
+     ${r.hints?`<p class="hint">MakeMKV 原始信息：${esc(r.hints)}</p>`:''}
+     ${extra||'<p class="hint">若这是数据盘或镜像不完整，MakeMKV 不会找到视频 title；DVD 无需 key。</p>'}</div>`;
     toast(r.error,"err");return;}
   ident=r;renderIdent();
 }
