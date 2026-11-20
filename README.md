@@ -77,6 +77,7 @@ docker compose -f docker-compose.ghcr.yml up -d
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| `v1.1.3` | 2026-11-20 | 识别失败页新增 ISO 结构预检（BDMV/VIDEO_TS/ISO9660/UDF），直接判断数据盘/二次打包/损坏镜像 |
 | `v1.1.2` | 2026-11-20 | 修正识别失败诊断：区分「未加密盘但无 title」（ISO 结构问题）与真正的 key 错误 |
 | `v1.1.1` | 2026-11-20 | 识别失败时显示 MakeMKV 原始错误与实时 key 状态，移除误导性的固定 key 提示 |
 | `v1.1.0` | 2026-11-20 | 新增 MakeMKV Key 一键获取与周期自动更新；抓取复用已配置代理 |
@@ -85,6 +86,7 @@ docker compose -f docker-compose.ghcr.yml up -d
 镜像标签：
 
 - `ghcr.io/songboxiang/splitter:latest` — 默认分支最新构建
+- `ghcr.io/songboxiang/splitter:1.1.3` — 固定语义化版本（打 `v*` 标签触发）
 - `ghcr.io/songboxiang/splitter:1.1.0` — 固定语义化版本（打 `v*` 标签触发）
 - `ghcr.io/songboxiang/splitter:sha-<commit>` — 每次提交对应版本
 

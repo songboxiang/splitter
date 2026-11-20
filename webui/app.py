@@ -567,6 +567,38 @@ def run_makemkv_info(iso_path, timeout=300):
     except Exception as e:
         return "", str(e)
 
+def _iso_structure_probe(iso_path):
+    """轻量预检 ISO 根目录结构：读取前 16MB 查找视频盘/文件系统标识。
+    不依赖额外系统包，只做只读扫描，不影响 MakeMKV 正常识别。"""
+    result = {
+        "checked": False,
+        "has_bdmv": False,
+        "has_video_ts": False,
+        "has_iso9660": False,
+        "has_udf": False,
+        "note": "",
+    }
+    try:
+        p = Path(iso_path)
+        size = p.stat().st_size
+        limit = min(size, 16 * 1024 * 1024)
+        with p.open("rb") as f:
+            head = f.read(limit).upper()
+        result["checked"] = True
+        result["has_bdmv"] = b"BDMV" in head
+        result["has_video_ts"] = b"VIDEO_TS" in head
+        result["has_iso9660"] = b"CD001" in head
+        result["has_udf"] = b"NSR0" in head or b"UDF" in head
+        if result["has_bdmv"] or result["has_video_ts"]:
+            result["note"] = "检测到视频盘目录标识，镜像结构看起来是原盘备份"
+        elif result["has_iso9660"] or result["has_udf"]:
+            result["note"] = "检测到标准 ISO/UDF 文件系统，但未发现 BDMV/VIDEO_TS 目录标识"
+        else:
+            result["note"] = "未发现常见光盘文件系统或视频目录标识，镜像可能损坏或非标准封装"
+    except Exception as e:
+        result["note"] = f"预检失败：{e}"
+    return result
+
 def _makemkv_hints(text, err=""):
     """从 makemkvcon 原始输出中提取诊断线索, 返回 (key_related: bool, hints: str)"""
     raw = (text or "") + "\n" + (err or "")
@@ -614,7 +646,8 @@ def api_identify():
     log(f"identify diag key_related={key_related} hints={hints[:200]}")
     if not text.strip():
         return jsonify({"ok": False, "error": err or "无法读取 ISO 信息", "key_related": key_related,
-                        "hints": hints, "likely_cause": "empty_output"})
+                        "hints": hints, "likely_cause": "empty_output",
+                        "iso_structure": _iso_structure_probe(path)})
     parsed = parse_makemkv_info(text)
     if not parsed["titles"]:
         low = (text or "").lower()
@@ -627,7 +660,8 @@ def api_identify():
         else:
             cause = "unknown"
         return jsonify({"ok": False, "error": "未识别到任何 title", "key_related": key_related,
-                        "hints": hints, "likely_cause": cause})
+                        "hints": hints, "likely_cause": cause,
+                        "iso_structure": _iso_structure_probe(path)})
     parsed["identified_at"] = datetime.now().isoformat()
     parsed["path"] = path
     cache[path] = parsed
