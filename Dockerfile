@@ -4,7 +4,7 @@ FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
-    MAKEKV_VER=2.0.0 \
+    MAKEKV_VER=1.18.4 \
     WEBUI_PORT=8088
 
 # 换国内 apt 源加速(用 http, 因为基础镜像还没有 ca-certificates)
@@ -24,9 +24,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # 编译安装 MakeMKV (oss -> bin)
+# 固定 1.18.4：2.0.0 对「无 AACS 目录的已解密/备份 BDMV 镜像」存在已知 bug，
+# 会报 AACS directory not present 后直接崩溃或读不到任何 title（官方论坛已确认）。
+# 1.18.4 兼容当前 beta key，且能正常识别章节点。
 RUN cd /tmp \
-    && wget -q "https://www.makemkv.com/download/makemkv-oss-${MAKEKV_VER}.tar.gz" -O oss.tgz \
-    && wget -q "https://www.makemkv.com/download/makemkv-bin-${MAKEKV_VER}.tar.gz" -O bin.tgz \
+    && wget -q "https://www.makemkv.com/download/old/makemkv-oss-${MAKEKV_VER}.tar.gz" -O oss.tgz \
+    && wget -q "https://www.makemkv.com/download/old/makemkv-bin-${MAKEKV_VER}.tar.gz" -O bin.tgz \
     && tar xzf oss.tgz && tar xzf bin.tgz \
     && cd /tmp/makemkv-oss-${MAKEKV_VER} \
     && ./configure && make -j"$(nproc)" && make install \

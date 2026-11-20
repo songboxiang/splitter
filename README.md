@@ -77,6 +77,7 @@ docker compose -f docker-compose.ghcr.yml up -d
 
 | 版本 | 日期 | 说明 |
 |---|---|---|
+| `v1.1.4` | 2026-11-20 | 修复 MakeMKV 2.0.0 无法读取「无 AACS 目录的备份/已解密 BDMV 镜像」的已知 bug：内置版本降为 1.18.4 |
 | `v1.1.3` | 2026-11-20 | 识别失败页新增 ISO 结构预检（BDMV/VIDEO_TS/ISO9660/UDF），直接判断数据盘/二次打包/损坏镜像 |
 | `v1.1.2` | 2026-11-20 | 修正识别失败诊断：区分「未加密盘但无 title」（ISO 结构问题）与真正的 key 错误 |
 | `v1.1.1` | 2026-11-20 | 识别失败时显示 MakeMKV 原始错误与实时 key 状态，移除误导性的固定 key 提示 |
@@ -86,6 +87,7 @@ docker compose -f docker-compose.ghcr.yml up -d
 镜像标签：
 
 - `ghcr.io/songboxiang/splitter:latest` — 默认分支最新构建
+- `ghcr.io/songboxiang/splitter:1.1.4` — 固定语义化版本（打 `v*` 标签触发）
 - `ghcr.io/songboxiang/splitter:1.1.3` — 固定语义化版本（打 `v*` 标签触发）
 - `ghcr.io/songboxiang/splitter:1.1.0` — 固定语义化版本（打 `v*` 标签触发）
 - `ghcr.io/songboxiang/splitter:sha-<commit>` — 每次提交对应版本
@@ -94,5 +96,6 @@ docker compose -f docker-compose.ghcr.yml up -d
 
 ## 备注
 
-- MakeMKV 为 beta 软件，Dockerfile 固定版本 2.0.0；若 key 过期导致蓝光识别失败，更新 key 即可，新版 MakeMKV 也会重置 60 天试用。
+- MakeMKV 内置版本固定为 **1.18.4**。2.0.0 在打开「无 AACS 目录的已解密/备份 BDMV 镜像」时会崩溃或读不到 title（官方论坛已知问题），1.18.4 不受影响且兼容当前 beta key。
+- 若 key 过期导致加密蓝光识别失败，到「设置」页点「一键获取最新 Key」即可，无需重启容器。
 - 分割是**无损 remux**，不转码，速度取决于磁盘 IO，通常远快于实时。
